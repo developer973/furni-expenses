@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FURNI — Учёт расходов</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111418;
+    --surface2: #181d23;
+    --border: #22282f;
+    --accent: #e8c547;
+    --accent2: #3de88e;
+    --danger: #e85b47;
+    --warn: #e89347;
+    --text: #e8eaed;
+    --muted: #5a6475;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ─── GRID BACKGROUND ─── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(232,197,71,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(232,197,71,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ─── HEADER ─── */
+  header {
+    position: relative; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 36px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,12,15,0.9);
+    backdrop-filter: blur(12px);
+  }
+  .logo {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo-img {
+    height: 36px;
+    width: auto;
+    filter: brightness(0) invert(1);
+    display: block;
+  }
+  .header-right {
+    display: flex; align-items: center; gap: 20px;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+  }
+  .live-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent2);
+    box-shadow: 0 0 8px var(--accent2);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ─── MAIN LAYOUT ─── */
+  main {
+    position: relative; z-index: 1;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 36px 36px 60px;
+  }
+
+  /* ─── SECTION HEADER ─── */
+  .section-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ─── STAT CARDS ─── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 40px;
+    animation: fadeUp 0.4s ease both;
+  }
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(16px) }
+    to   { opacity:1; transform:translateY(0) }
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .stat-card:hover { border-color: var(--accent); }
+  .stat-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .stat-card:hover::before { opacity: 1; }
+
+  .stat-label {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--muted); letter-spacing: 1.5px;
+    text-transform: uppercase; margin-bottom: 10px;
+  }
+  .stat-value {
+    font-family: var(--mono); font-size: 32px; font-weight: 700;
+    line-height: 1; color: var(--text);
+  }
+  .stat-value small { font-size: 14px; color: var(--muted); margin-left: 4px; }
+  .stat-sub {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    margin-top: 8px;
+  }
+  .stat-sub .up { color: var(--accent2); }
+  .stat-sub .down { color: var(--danger); }
+
+  /* ─── TWO COL LAYOUT ─── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 24px;
+    margin-bottom: 40px;
+  }
+
+  /* ─── CARD ─── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    animation: fadeUp 0.5s ease both;
+  }
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .card-title {
+    font-family: var(--mono); font-size: 12px; font-weight: 600;
+    letter-spacing: 1px; color: var(--text);
+  }
+  .card-tag {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--accent); background: rgba(232,197,71,0.1);
+    padding: 3px 8px; letter-spacing: 0.5px;
+  }
+
+  /* ─── ENGINEER TABLE ─── */
+  .eng-table { width: 100%; }
+  .eng-row {
+    display: grid;
+    grid-template-columns: 1fr 120px 100px 90px;
+    gap: 12px;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+    transition: background 0.15s;
+    cursor: pointer;
+  }
+  .eng-row:last-child { border-bottom: none; }
+  .eng-row:hover { background: var(--surface2); }
+  .eng-row.header-row {
+    padding: 10px 24px;
+    cursor: default;
+  }
+  .eng-row.header-row:hover { background: transparent; }
+  .col-label {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+
+  .eng-name {
+    font-size: 14px; font-weight: 600; color: var(--text);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .eng-avatar {
+    width: 30px; height: 30px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 11px; font-weight: 700;
+    color: var(--accent); flex-shrink: 0;
+  }
+  .eng-meta {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--muted); margin-top: 2px;
+  }
+
+  /* ─── BALANCE BAR ─── */
+  .balance-col { text-align: right; }
+  .balance-amount {
+    font-family: var(--mono); font-size: 14px; font-weight: 600;
+  }
+  .balance-bar-wrap {
+    height: 3px; background: var(--border);
+    margin-top: 6px; position: relative;
+  }
+  .balance-bar-fill {
+    height: 100%; position: absolute; left: 0; top: 0;
+    transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  /* ─── STATUS BADGE ─── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--mono); font-size: 10px; font-weight: 600;
+    padding: 3px 8px; letter-spacing: 0.5px;
+  }
+  .badge-dot { width: 5px; height: 5px; border-radius: 50%; }
+  .badge.ok { color: var(--accent2); background: rgba(61,232,142,0.08); }
+  .badge.ok .badge-dot { background: var(--accent2); }
+  .badge.warn { color: var(--warn); background: rgba(232,147,71,0.08); }
+  .badge.warn .badge-dot { background: var(--warn); }
+  .badge.crit { color: var(--danger); background: rgba(232,91,71,0.08); }
+  .badge.crit .badge-dot { background: var(--danger); }
+
+  /* ─── TRANSACTIONS ─── */
+  .txn-list { }
+  .txn-item {
+    display: flex; align-items: flex-start;
+    gap: 14px; padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  .txn-item:last-child { border-bottom: none; }
+  .txn-item:hover { background: var(--surface2); }
+  .txn-icon {
+    width: 32px; height: 32px; flex-shrink: 0;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+  }
+  .txn-info { flex: 1; }
+  .txn-vendor { font-size: 13px; font-weight: 600; color: var(--text); }
+  .txn-meta { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .txn-amount {
+    font-family: var(--mono); font-size: 14px; font-weight: 700;
+    color: var(--danger); text-align: right; white-space: nowrap;
+  }
+  .txn-amount small { font-size: 10px; color: var(--muted); display: block; margin-top: 2px; }
+
+  /* ─── ALERTS ─── */
+  .alerts-list { }
+  .alert-item {
+    display: flex; align-items: flex-start;
+    gap: 14px; padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .alert-item:last-child { border-bottom: none; }
+  .alert-stripe {
+    width: 3px; height: 36px; flex-shrink: 0;
+    align-self: center;
+  }
+  .alert-body { flex: 1; }
+  .alert-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .alert-desc { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .alert-time { font-family: var(--mono); font-size: 10px; color: var(--muted); white-space: nowrap; }
+
+  /* ─── CHART ─── */
+  .chart-wrap { padding: 24px; }
+  .chart-bars {
+    display: flex; align-items: flex-end; gap: 6px;
+    height: 100px;
+  }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .bar {
+    width: 100%; background: var(--border);
+    position: relative; transition: background 0.2s;
+    min-height: 4px;
+  }
+  .bar:hover { background: var(--accent); }
+  .bar-fill {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: var(--accent);
+    opacity: 0.7;
+    transition: height 0.8s cubic-bezier(0.4,0,0.2,1);
+  }
+  .bar-label {
+    font-family: var(--mono); font-size: 9px; color: var(--muted);
+    text-align: center;
+  }
+
+  /* ─── BOTTOM GRID ─── */
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  /* ─── CATEGORY BREAKDOWN ─── */
+  .cat-list { padding: 8px 0; }
+  .cat-item {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cat-item:last-child { border-bottom: none; }
+  .cat-icon { font-size: 16px; width: 20px; text-align: center; }
+  .cat-name { flex: 1; font-size: 13px; color: var(--text); }
+  .cat-bar-wrap { width: 100px; height: 3px; background: var(--border); position: relative; }
+  .cat-bar-fill { position: absolute; left: 0; top: 0; height: 100%; }
+  .cat-amount { font-family: var(--mono); font-size: 12px; font-weight: 600; width: 70px; text-align: right; }
+
+  /* ─── TOP UP FORM ─── */
+  .topup-form { padding: 20px 24px; }
+  .form-group { margin-bottom: 16px; }
+  .form-label {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    letter-spacing: 1px; text-transform: uppercase; display: block;
+    margin-bottom: 6px;
+  }
+  .form-select, .form-input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 13px;
+    padding: 10px 12px; outline: none;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+  }
+  .form-select:focus, .form-input:focus { border-color: var(--accent); }
+  .form-select option { background: var(--surface); }
+  .btn-primary {
+    width: 100%; background: var(--accent); color: #000;
+    border: none; font-family: var(--mono); font-size: 12px;
+    font-weight: 700; letter-spacing: 1px; padding: 12px;
+    cursor: pointer; text-transform: uppercase;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-primary:active { transform: scale(0.99); }
+
+  .success-msg {
+    display: none;
+    background: rgba(61,232,142,0.1);
+    border: 1px solid var(--accent2);
+    padding: 10px 14px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--accent2); margin-top: 12px;
+    text-align: center;
+  }
+
+  /* ─── MODAL ─── */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    width: 100%; max-width: 480px;
+    padding: 0;
+    animation: fadeUp 0.25s ease;
+  }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-title { font-size: 16px; font-weight: 700; }
+  .modal-close {
+    background: none; border: none; color: var(--muted);
+    font-size: 18px; cursor: pointer; padding: 4px;
+    transition: color 0.2s;
+  }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: 24px; }
+  .modal-txn-list { }
+  .modal-txn {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+    font-family: var(--mono); font-size: 12px;
+  }
+  .modal-txn:last-child { border-bottom: none; }
+  .modal-txn-left { color: var(--text); }
+  .modal-txn-right { color: var(--danger); font-weight: 600; }
+
+  /* ─── RESPONSIVE ─── */
+  @media (max-width: 900px) {
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .two-col { grid-template-columns: 1fr; }
+    .bottom-grid { grid-template-columns: 1fr; }
+    main { padding: 24px 20px; }
+    header { padding: 16px 20px; }
+  }
+
+  /* ─── SCROLLBAR ─── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <img class="logo-img" src="data:image/png;base64,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" alt="FURNI">
+  </div>
+  <div class="header-right">
+    <div class="live-dot"></div>
+    <span>LIVE</span>
+    <span id="current-time">—</span>
+    <span style="color:var(--border)">|</span>
+    <span>v1.0</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- STAT CARDS -->
+  <div class="section-label">Сводка</div>
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Общий депозит</div>
+      <div class="stat-value" id="stat-total">—<small>AED</small></div>
+      <div class="stat-sub" id="stat-eng-count">загрузка...</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Потрачено (месяц)</div>
+      <div class="stat-value" id="stat-month">—<small>AED</small></div>
+      <div class="stat-sub">текущий месяц</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Остаток (все)</div>
+      <div class="stat-value" id="stat-balance">—<small>AED</small></div>
+      <div class="stat-sub" id="stat-balance-pct">% от депозитов</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Транзакций</div>
+      <div class="stat-value" id="stat-txn">—</div>
+      <div class="stat-sub">всего записей</div>
+    </div>
+  </div>
+
+  <!-- ENGINEERS + TRANSACTIONS -->
+  <div class="two-col">
+
+    <!-- Engineers -->
+    <div class="card" style="animation-delay:0.1s">
+      <div class="card-header">
+        <span class="card-title">ИНЖЕНЕРЫ / БАЛАНСЫ</span>
+        <span class="card-tag">LIVE</span>
+      </div>
+      <div class="eng-table">
+        <div class="eng-row header-row">
+          <div class="col-label">Инженер</div>
+          <div class="col-label" style="text-align:right">Остаток</div>
+          <div class="col-label" style="text-align:right">Потрачено</div>
+          <div class="col-label" style="text-align:right">Статус</div>
+        </div>
+        <div id="eng-rows"><div style="padding:24px;font-family:var(--mono);font-size:12px;color:var(--muted)">Загрузка...</div></div>
+      </div>
+    </div>
+
+    <!-- Right side: Alerts + Top up -->
+    <div style="display:flex;flex-direction:column;gap:24px">
+
+      <!-- Alerts -->
+      <div class="card" style="animation-delay:0.2s">
+        <div class="card-header">
+          <span class="card-title">УВЕДОМЛЕНИЯ</span>
+          <span class="card-tag" id="alert-count-tag" style="color:var(--danger);background:rgba(232,91,71,0.1)">— ALERT</span>
+        </div>
+        <div class="alerts-list" id="alerts-list"><div style="padding:16px 24px;font-family:var(--mono);font-size:12px;color:var(--muted)">Загрузка...</div></div>
+      </div>
+
+      <!-- Top up form -->
+      <div class="card" style="animation-delay:0.3s">
+        <div class="card-header">
+          <span class="card-title">ПОПОЛНИТЬ ДЕПОЗИТ</span>
+        </div>
+        <div class="topup-form">
+          <div class="form-group">
+            <label class="form-label">Инженер</label>
+            <select class="form-select" id="topup-eng"><option>Загрузка...</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Сумма (AED)</label>
+            <input class="form-input" type="number" id="topup-amount" placeholder="2000" value="2000">
+          </div>
+          <button class="btn-primary" onclick="topUp()">ПОПОЛНИТЬ →</button>
+          <div class="success-msg" id="topup-success">✓ Депозит пополнен! Инженер получил уведомление в Telegram.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CHART + CATEGORIES -->
+  <div class="bottom-grid">
+
+    <!-- Spending chart -->
+    <div class="card" style="animation-delay:0.35s">
+      <div class="card-header">
+        <span class="card-title">РАСХОДЫ ПО ДНЯМ (30 дней)</span>
+        <span class="card-tag">AED</span>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-bars" id="chart-bars"></div>
+        <div style="display:flex;justify-content:space-between;margin-top:12px">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">3 ФЕВ</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">5 МАР</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Category breakdown -->
+    <div class="card" style="animation-delay:0.4s">
+      <div class="card-header">
+        <span class="card-title">ПО КАТЕГОРИЯМ</span>
+        <span class="card-tag">МЕСЯЦ</span>
+      </div>
+      <div class="cat-list" id="cat-list"><div style="padding:16px 24px;font-family:var(--mono);font-size:12px;color:var(--muted)">Загрузка...</div></div>
+    </div>
+
+  </div>
+
+</main>
+
+<!-- MODAL: Engineer transactions -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-eng-name">—</span>
+      <button class="modal-close" onclick="document.getElementById('modal-overlay').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px;letter-spacing:1px">ПОСЛЕДНИЕ ТРАНЗАКЦИИ</div>
+      <div class="modal-txn-list" id="modal-txn-list"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Time ─────────────────────────────────────────────────────
+function updateTime() {
+  const now = new Date();
+  document.getElementById('current-time').textContent =
+    now.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+setInterval(updateTime, 1000);
+updateTime();
+
+// ── Helpers ───────────────────────────────────────────────────
+const fmt = (n) => new Intl.NumberFormat('ru-RU').format(Math.round(n));
+const statusColor = { ok: 'var(--accent2)', warn: 'var(--warn)', crit: 'var(--danger)' };
+const statusLabel = { ok: 'OK', warn: 'LOW', crit: 'CRIT' };
+const catIcon = { transport:'🚗', purchase:'🛒', components:'⚙️', other:'📦' };
+const catName = { transport:'Транспорт', purchase:'Закупка', components:'Комплектующие', other:'Другое' };
+const catColor = { transport:'var(--warn)', purchase:'var(--accent2)', components:'var(--accent)', other:'var(--muted)' };
+
+let engineersData = [];
+
+// ── Load everything ───────────────────────────────────────────
+async function loadAll() {
+  try {
+    const [sum, engs] = await Promise.all([
+      fetch('/api/summary').then(r => r.json()),
+      fetch('/api/engineers').then(r => r.json()),
+    ]);
+    engineersData = engs;
+    renderStats(sum);
+    renderEngineers(engs);
+    renderAlerts(sum.alerts);
+    renderChart(sum.daily);
+    renderCategories(sum.categories);
+    renderTopupSelect(engs);
+  } catch(e) {
+    console.error('Load error:', e);
+  }
+}
+
+// ── Stats ─────────────────────────────────────────────────────
+function renderStats(s) {
+  document.getElementById('stat-total').innerHTML = fmt(s.total_initial) + '<small>AED</small>';
+  document.getElementById('stat-eng-count').textContent = s.engineer_count + ' инженеров';
+  document.getElementById('stat-month').innerHTML = fmt(s.month_spent) + '<small>AED</small>';
+  document.getElementById('stat-balance').innerHTML = fmt(s.total_balance) + '<small>AED</small>';
+  const pct = s.total_initial > 0 ? Math.round(s.total_balance / s.total_initial * 100) : 0;
+  document.getElementById('stat-balance-pct').textContent = pct + '% от депозитов';
+  document.getElementById('stat-txn').textContent = s.txn_count;
+}
+
+// ── Engineers ─────────────────────────────────────────────────
+function renderEngineers(engs) {
+  const container = document.getElementById('eng-rows');
+  if (!engs.length) {
+    container.innerHTML = '<div style="padding:24px;font-family:var(--mono);font-size:12px;color:var(--muted)">Нет инженеров</div>';
+    return;
+  }
+  container.innerHTML = engs.map(e => {
+    const initials = e.name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+    const color = statusColor[e.status];
+    const label = statusLabel[e.status];
+    const badgeClass = e.status;
+    return `
+      <div class="eng-row" onclick="openModal('${e.name}', '${e.id}')">
+        <div>
+          <div class="eng-name">
+            <div class="eng-avatar">${initials}</div>
+            <div>${e.name}<div class="eng-meta">${e.project || '—'}</div></div>
+          </div>
+        </div>
+        <div class="balance-col">
+          <div class="balance-amount" style="color:${color}">${fmt(e.balance)}<small style="font-size:10px;color:var(--muted)"> ${e.currency}</small></div>
+          <div class="balance-bar-wrap"><div class="balance-bar-fill" style="width:${e.pct}%;background:${color}"></div></div>
+        </div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:right">${fmt(e.spent)} ${e.currency}</div>
+        <div style="text-align:right"><span class="badge ${badgeClass}"><span class="badge-dot"></span>${label}</span></div>
+      </div>`;
+  }).join('');
+}
+
+// ── Alerts ────────────────────────────────────────────────────
+function renderAlerts(alerts) {
+  const container = document.getElementById('alerts-list');
+  const tag = document.getElementById('alert-count-tag');
+  tag.textContent = alerts.length + ' ALERT';
+  if (!alerts.length) {
+    container.innerHTML = '<div style="padding:16px 24px;font-family:var(--mono);font-size:12px;color:var(--accent2)">✓ Все балансы в норме</div>';
+    return;
+  }
+  const levelColor = { crit: 'var(--danger)', warn: 'var(--warn)' };
+  const levelLabel = { crit: 'критически мало', warn: 'низкий баланс' };
+  container.innerHTML = alerts.map(a => `
+    <div class="alert-item">
+      <div class="alert-stripe" style="background:${levelColor[a.level]}"></div>
+      <div class="alert-body">
+        <div class="alert-title">${a.name} — ${levelLabel[a.level]}</div>
+        <div class="alert-desc">${a.msg}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ── Chart ─────────────────────────────────────────────────────
+function renderChart(daily) {
+  const wrap = document.getElementById('chart-bars');
+  wrap.innerHTML = '';
+  const values = daily.map(d => d.amount);
+  const max = Math.max(...values, 1);
+  daily.forEach(d => {
+    const pct = (d.amount / max * 100);
+    const col = document.createElement('div');
+    col.className = 'bar-col';
+    col.innerHTML = `<div class="bar" style="height:80px" title="${fmt(d.amount)} AED — ${d.date}">
+      <div class="bar-fill" style="height:0%" data-h="${pct}%"></div></div>`;
+    wrap.appendChild(col);
+  });
+  setTimeout(() => {
+    document.querySelectorAll('.bar-fill').forEach(el => { el.style.height = el.dataset.h; });
+  }, 100);
+}
+
+// ── Categories ────────────────────────────────────────────────
+function renderCategories(cats) {
+  const container = document.getElementById('cat-list');
+  const total = Object.values(cats).reduce((a,b) => a+b, 0) || 1;
+  const order = ['components','purchase','transport','other'];
+  container.innerHTML = order.map(key => {
+    const pct = Math.round(cats[key] / total * 100);
+    const color = catColor[key];
+    return `<div class="cat-item">
+      <div class="cat-icon">${catIcon[key]}</div>
+      <div class="cat-name">${catName[key]}</div>
+      <div class="cat-bar-wrap"><div class="cat-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <div class="cat-amount" style="color:${color}">${fmt(cats[key])} AED</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Top-up select ─────────────────────────────────────────────
+function renderTopupSelect(engs) {
+  const sel = document.getElementById('topup-eng');
+  sel.innerHTML = engs.map(e =>
+    `<option value="${e.id}">${e.name} (${fmt(e.balance)} ${e.currency})</option>`
+  ).join('');
+}
+
+// ── Top Up POST ───────────────────────────────────────────────
+async function topUp() {
+  const sel = document.getElementById('topup-eng');
+  const amt = parseFloat(document.getElementById('topup-amount').value);
+  if (!amt || amt <= 0) return;
+  const telegram_id = sel.value;
+  try {
+    const res = await fetch('/api/topup', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({telegram_id, amount: amt})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const msg = document.getElementById('topup-success');
+      msg.style.display = 'block';
+      setTimeout(() => { msg.style.display = 'none'; }, 4000);
+      loadAll(); // refresh
+    }
+  } catch(e) { console.error(e); }
+}
+
+// ── Modal ─────────────────────────────────────────────────────
+async function openModal(name, engId) {
+  document.getElementById('modal-eng-name').textContent = name;
+  const list = document.getElementById('modal-txn-list');
+  list.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);padding:10px 0">Загрузка...</div>';
+  document.getElementById('modal-overlay').classList.add('open');
+  try {
+    const txns = await fetch(`/api/transactions?engineer_id=${engId}`).then(r => r.json());
+    if (!txns.length) {
+      list.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);padding:10px 0">Нет транзакций</div>';
+      return;
+    }
+    list.innerHTML = txns.slice(0,10).map(t => {
+      const icon = catIcon[t.category] || '📦';
+      const catLabel = catName[t.category] || 'Другое';
+      return `<div class="modal-txn">
+        <div class="modal-txn-left">
+          <div style="font-weight:600">${t.vendor || '—'}</div>
+          <div style="color:var(--muted);font-size:10px;margin-top:2px">${String(t.date).slice(0,10)} · ${icon} ${catLabel}</div>
+        </div>
+        <div class="modal-txn-right">-${fmt(t.amount)} ${t.currency || 'AED'}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--danger);padding:10px 0">Ошибка загрузки</div>';
+  }
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('modal-overlay')) {
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+}
+
+// ── Init + auto-refresh every 30s ─────────────────────────────
+loadAll();
+setInterval(loadAll, 30000);
+</script>
+</body>
+</html>
