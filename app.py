@@ -185,3 +185,26 @@ def health():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
+
+@app.route("/api/transactions_all")
+def api_transactions_all():
+    """Return all transactions for client-side filtering."""
+    try:
+        records = sheets.transactions_sheet.get_all_records()
+        txns = []
+        for r in records:
+            txns.append({
+                "id": r.get("id", ""),
+                "date": r.get("date", ""),
+                "vendor": r.get("vendor", ""),
+                "amount": float(str(r.get("amount", 0)).replace(",", ".")),
+                "currency": r.get("currency", "AED"),
+                "category": r.get("category", "other"),
+                "description": r.get("description", ""),
+                "engineer_id": str(r.get("engineer_id", "")),
+            })
+        txns.sort(key=lambda x: str(x["date"]), reverse=True)
+        return jsonify(txns)
+    except Exception as e:
+        logger.error(f"api_transactions_all error: {e}")
+        return jsonify([])

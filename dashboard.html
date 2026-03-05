@@ -420,6 +420,17 @@
     header { padding: 16px 20px; }
   }
 
+  /* ─── PERIOD BUTTONS ─── */
+  .period-btn {
+    font-family: var(--mono); font-size: 10px; font-weight: 600;
+    color: var(--muted); background: transparent;
+    border: 1px solid var(--border); padding: 3px 8px;
+    cursor: pointer; letter-spacing: 0.5px;
+    transition: all 0.15s;
+  }
+  .period-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .period-btn.active { color: var(--accent); background: rgba(232,197,71,0.1); border-color: var(--accent); }
+
   /* ─── SCROLLBAR ─── */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
@@ -545,7 +556,21 @@
     <div class="card" style="animation-delay:0.4s">
       <div class="card-header">
         <span class="card-title">ПО КАТЕГОРИЯМ</span>
-        <span class="card-tag">МЕСЯЦ</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="period-btn active" data-period="month" onclick="setPeriod('month')">МЕСЯЦ</button>
+          <button class="period-btn" data-period="week" onclick="setPeriod('week')">НЕДЕЛЯ</button>
+          <button class="period-btn" data-period="all" onclick="setPeriod('all')">ВСЁ</button>
+          <button class="period-btn" data-period="custom" onclick="toggleCustomDate()">📅</button>
+        </div>
+      </div>
+      <div id="custom-date-row" style="display:none;padding:10px 24px;border-bottom:1px solid var(--border);gap:8px;align-items:center;font-family:var(--mono);font-size:11px;color:var(--muted)">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span>С</span>
+          <input type="date" id="date-from" class="form-input" style="width:140px;padding:6px 8px;font-size:11px">
+          <span>ПО</span>
+          <input type="date" id="date-to" class="form-input" style="width:140px;padding:6px 8px;font-size:11px">
+          <button class="btn-primary" style="width:auto;padding:6px 14px;font-size:11px" onclick="applyCustomDate()">ПРИМЕНИТЬ</button>
+        </div>
       </div>
       <div class="cat-list" id="cat-list"><div style="padding:16px 24px;font-family:var(--mono);font-size:12px;color:var(--muted)">Загрузка...</div></div>
     </div>
@@ -591,16 +616,18 @@ let engineersData = [];
 // ── Load everything ───────────────────────────────────────────
 async function loadAll() {
   try {
-    const [sum, engs] = await Promise.all([
+    const [sum, engs, txns] = await Promise.all([
       fetch('/api/summary').then(r => r.json()),
       fetch('/api/engineers').then(r => r.json()),
+      fetch('/api/transactions_all').then(r => r.json()),
     ]);
     engineersData = engs;
+    allTransactions = txns;
     renderStats(sum);
     renderEngineers(engs);
     renderAlerts(sum.alerts);
     renderChart(sum.daily);
-    renderCategories(sum.categories);
+    renderCategoriesFromTxns();
     renderTopupSelect(engs);
   } catch(e) {
     console.error('Load error:', e);
@@ -688,7 +715,62 @@ function renderChart(daily) {
   }, 100);
 }
 
-// ── Categories ────────────────────────────────────────────────
+// ── Categories with period filter ────────────────────────────
+let currentPeriod = 'month';
+let customFrom = null;
+let customTo = null;
+let allTransactions = [];
+
+function setPeriod(period) {
+  currentPeriod = period;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-period="${period}"]`).classList.add('active');
+  if (period !== 'custom') {
+    document.getElementById('custom-date-row').style.display = 'none';
+  }
+  renderCategoriesFromTxns();
+}
+
+function toggleCustomDate() {
+  const row = document.getElementById('custom-date-row');
+  row.style.display = row.style.display === 'none' ? 'flex' : 'none';
+}
+
+function applyCustomDate() {
+  customFrom = document.getElementById('date-from').value;
+  customTo = document.getElementById('date-to').value;
+  if (!customFrom || !customTo) return;
+  currentPeriod = 'custom';
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('[data-period="custom"]').classList.add('active');
+  renderCategoriesFromTxns();
+}
+
+function renderCategoriesFromTxns() {
+  const now = new Date();
+  let filtered = allTransactions;
+
+  if (currentPeriod === 'month') {
+    const ym = now.toISOString().slice(0, 7);
+    filtered = allTransactions.filter(t => String(t.date).slice(0, 7) === ym);
+  } else if (currentPeriod === 'week') {
+    const weekAgo = new Date(now - 7 * 86400000).toISOString().slice(0, 10);
+    filtered = allTransactions.filter(t => String(t.date).slice(0, 10) >= weekAgo);
+  } else if (currentPeriod === 'custom' && customFrom && customTo) {
+    filtered = allTransactions.filter(t => {
+      const d = String(t.date).slice(0, 10);
+      return d >= customFrom && d <= customTo;
+    });
+  }
+
+  const cats = { transport: 0, purchase: 0, components: 0, other: 0 };
+  filtered.forEach(t => {
+    const cat = t.category && cats.hasOwnProperty(t.category) ? t.category : 'other';
+    cats[cat] += parseFloat(String(t.amount || 0).replace(',', '.'));
+  });
+  renderCategories(cats);
+}
+
 function renderCategories(cats) {
   const container = document.getElementById('cat-list');
   const total = Object.values(cats).reduce((a,b) => a+b, 0) || 1;
