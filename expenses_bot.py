@@ -237,7 +237,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [
                 InlineKeyboardButton("✅ Подтвердить", callback_data="confirm_receipt"),
                 InlineKeyboardButton("❌ Отмена", callback_data="cancel_receipt"),
-            ]
+            ],
+            [
+                InlineKeyboardButton("✏️ Изменить сумму", callback_data="edit_amount"),
+                InlineKeyboardButton("🏪 Изменить магазин", callback_data="edit_vendor"),
+            ],
+            [
+                InlineKeyboardButton("📁 Изменить категорию", callback_data="edit_category"),
+                InlineKeyboardButton("📅 Изменить дату", callback_data="edit_date"),
+            ],
         ]
         
         await msg.edit_text(
@@ -271,6 +279,7 @@ async def confirm_receipt_callback(update: Update, context: ContextTypes.DEFAULT
     
     if query.data == "cancel_receipt":
         context.user_data.pop("pending_receipt", None)
+        context.user_data.pop("edit_field", None)
         await query.edit_message_text("❌ Расход отменён.")
         return
     
@@ -279,13 +288,52 @@ async def confirm_receipt_callback(update: Update, context: ContextTypes.DEFAULT
         await query.edit_message_text("❌ Данные не найдены. Попробуй заново.")
         return
     
+    # ── Edit field buttons ──
+    if query.data == "edit_amount":
+        context.user_data["edit_field"] = "amount"
+        await query.edit_message_text(
+            "✏️ Введи новую сумму (только число, например `150.50`):",
+            parse_mode="Markdown"
+        )
+        return
+
+    if query.data == "edit_vendor":
+        context.user_data["edit_field"] = "vendor"
+        await query.edit_message_text("🏪 Введи название магазина/поставщика:")
+        return
+
+    if query.data == "edit_date":
+        context.user_data["edit_field"] = "date"
+        await query.edit_message_text("📅 Введи дату в формате `ГГГГ-ММ-ДД` (например `2026-03-05`):", parse_mode="Markdown")
+        return
+
+    if query.data == "edit_category":
+        keyboard = [
+            [InlineKeyboardButton("⚙️ Комплектующие", callback_data="setcat_components")],
+            [InlineKeyboardButton("🛒 Закупка", callback_data="setcat_purchase")],
+            [InlineKeyboardButton("🚗 Транспорт", callback_data="setcat_transport")],
+            [InlineKeyboardButton("📦 Другое", callback_data="setcat_other")],
+        ]
+        await query.edit_message_text(
+            "📁 Выбери категорию:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    # ── Set category ──
+    if query.data.startswith("setcat_"):
+        cat = query.data.replace("setcat_", "")
+        pending["category"] = cat
+        context.user_data["pending_receipt"] = pending
+        await _show_confirmation(query, pending)
+        return
+    
+    # ── Confirm ──
     try:
-        # Save to Google Sheets
         sheets.add_transaction(pending)
         sheets.update_balance(pending["user_id"], pending["new_balance"])
-        
         context.user_data.pop("pending_receipt", None)
-        
+        context.user_data.pop("edit_field", None)
         currency = pending["currency"]
         await query.edit_message_text(
             f"✅ *Расход записан!*\n\n"
@@ -293,10 +341,127 @@ async def confirm_receipt_callback(update: Update, context: ContextTypes.DEFAULT
             f"💼 Остаток: *{pending['new_balance']:,.2f} {currency}*",
             parse_mode="Markdown"
         )
-        
     except Exception as e:
         logger.error(f"Error saving transaction: {e}")
         await query.edit_message_text("❌ Ошибка сохранения. Обратись к руководителю.")
+
+
+async def handle_edit_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle text input when user is editing a receipt field."""
+    edit_field = context.user_data.get("edit_field")
+    pending = context.user_data.get("pending_receipt")
+
+    if not edit_field or not pending:
+        return  # Not in edit mode, ignore
+
+    text = update.message.text.strip()
+    
+    if edit_field == "amount":
+        try:
+            new_amount = float(text.replace(",", "."))
+            if new_amount <= 0:
+                raise ValueError
+            pending["amount"] = new_amount
+            pending["new_balance"] = pending["current_balance"] - new_amount
+        except ValueError:
+            await update.message.reply_text("❌ Неверная сумма. Введи число, например `150.50`", parse_mode="Markdown")
+            return
+
+    elif edit_field == "vendor":
+        pending["vendor"] = text
+
+    elif edit_field == "date":
+        try:
+            datetime.strptime(text, "%Y-%m-%d")
+            pending["date"] = text
+        except ValueError:
+            await update.message.reply_text("❌ Неверный формат. Используй `ГГГГ-ММ-ДД`", parse_mode="Markdown")
+            return
+
+    context.user_data["pending_receipt"] = pending
+    context.user_data.pop("edit_field", None)
+
+    # Show updated confirmation
+    sent = await update.message.reply_text("Обновляю...")
+    await _show_confirmation_msg(sent, pending, context)
+
+
+async def _show_confirmation(query, pending: dict):
+    """Show confirmation message via callback query."""
+    category_map = {
+        "transport": "🚗 Транспорт", "purchase": "🛒 Закупка",
+        "components": "⚙️ Комплектующие", "other": "📦 Другое"
+    }
+    cat_label = category_map.get(pending.get("category", "other"), "📦 Другое")
+    currency = pending["currency"]
+
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Подтвердить", callback_data="confirm_receipt"),
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_receipt"),
+        ],
+        [
+            InlineKeyboardButton("✏️ Изменить сумму", callback_data="edit_amount"),
+            InlineKeyboardButton("🏪 Изменить магазин", callback_data="edit_vendor"),
+        ],
+        [
+            InlineKeyboardButton("📁 Изменить категорию", callback_data="edit_category"),
+            InlineKeyboardButton("📅 Изменить дату", callback_data="edit_date"),
+        ],
+    ]
+
+    await query.edit_message_text(
+        f"✅ *Данные обновлены*\n\n"
+        f"🏪 Магазин: {pending['vendor']}\n"
+        f"💰 Сумма: *{pending['amount']:,.2f} {currency}*\n"
+        f"📁 Категория: {cat_label}\n"
+        f"📅 Дата: {pending['date']}\n\n"
+        f"──────────────────\n"
+        f"Баланс сейчас: {pending['current_balance']:,.2f} {currency}\n"
+        f"Баланс после: *{pending['new_balance']:,.2f} {currency}*\n\n"
+        f"Подтвердить списание?",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+
+async def _show_confirmation_msg(msg, pending: dict, context):
+    """Show confirmation message via new message."""
+    category_map = {
+        "transport": "🚗 Транспорт", "purchase": "🛒 Закупка",
+        "components": "⚙️ Комплектующие", "other": "📦 Другое"
+    }
+    cat_label = category_map.get(pending.get("category", "other"), "📦 Другое")
+    currency = pending["currency"]
+
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Подтвердить", callback_data="confirm_receipt"),
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_receipt"),
+        ],
+        [
+            InlineKeyboardButton("✏️ Изменить сумму", callback_data="edit_amount"),
+            InlineKeyboardButton("🏪 Изменить магазин", callback_data="edit_vendor"),
+        ],
+        [
+            InlineKeyboardButton("📁 Изменить категорию", callback_data="edit_category"),
+            InlineKeyboardButton("📅 Изменить дату", callback_data="edit_date"),
+        ],
+    ]
+
+    await msg.edit_text(
+        f"✅ *Данные обновлены*\n\n"
+        f"🏪 Магазин: {pending['vendor']}\n"
+        f"💰 Сумма: *{pending['amount']:,.2f} {currency}*\n"
+        f"📁 Категория: {cat_label}\n"
+        f"📅 Дата: {pending['date']}\n\n"
+        f"──────────────────\n"
+        f"Баланс сейчас: {pending['current_balance']:,.2f} {currency}\n"
+        f"Баланс после: *{pending['new_balance']:,.2f} {currency}*\n\n"
+        f"Подтвердить списание?",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
 
 
 async def manual_expense(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -366,7 +531,8 @@ def main():
     app.add_handler(CommandHandler("history", history))
     app.add_handler(CommandHandler("manual", manual_expense))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(CallbackQueryHandler(confirm_receipt_callback, pattern="^(confirm|cancel)_receipt$"))
+    app.add_handler(CallbackQueryHandler(confirm_receipt_callback, pattern="^(confirm|cancel)_receipt$|^edit_(amount|vendor|category|date)$|^setcat_"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_input))
     
     logger.info("🤖 Expense bot started!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
